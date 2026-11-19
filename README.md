@@ -27,7 +27,5 @@ python main.py
 training the model runs on the CPU and saves the learned weights to shape_model.pt
 app then loads those weights when it starts and shows the model's scores for the three shapes live each 50ms
 
-*this is my first achievable project ever so spread no hate*
-
-*have fun playing around with it! :)*
+*this is my first achievable project ever so spread no hate and i hope you have fun testing it out! :)*
 
