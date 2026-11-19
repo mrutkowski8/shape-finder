@@ -1,7 +1,13 @@
+import sys
 import tkinter as tk
 from pathlib import Path
 
 from PIL import Image, ImageDraw, ImageTk
+
+from shape_model import SHAPES, load_model, predict_percentages
+
+
+LIVE_GUESS_INTERVAL_MS = 50
 
 
 class DrawingCanvas(tk.Canvas):
@@ -91,7 +97,7 @@ class DrawingCanvas(tk.Canvas):
         self._previous_point = None
 
 
-def create_guess_panel(window: tk.Tk) -> tk.Frame:
+def create_guess_panel(window: tk.Tk) -> tuple[tk.Frame, dict[str, tk.Label]]:
     panel = tk.Frame(
         window,
         background="#f7f7f7",
@@ -110,14 +116,15 @@ def create_guess_panel(window: tk.Tk) -> tk.Frame:
         foreground="#242b33",
         **label_style,
     ).grid(row=0, column=0, columnspan=2, sticky="w", pady=(0, 8))
-    for row, shape in enumerate(("triangle", "square", "circle"), start=1):
+    percentages = {}
+    for row, shape in enumerate(SHAPES, start=1):
         tk.Label(panel, text=shape, foreground="#242b33", **label_style).grid(
             row=row, column=0, sticky="w", pady=2
         )
-        tk.Label(panel, text="0%", foreground="#525b66", **label_style).grid(
-            row=row, column=1, sticky="e", pady=2
-        )
-    return panel
+        value = tk.Label(panel, text="0%", foreground="#525b66", **label_style)
+        value.grid(row=row, column=1, sticky="e", pady=2)
+        percentages[shape] = value
+    return panel, percentages
 
 
 def main() -> None:
@@ -149,7 +156,7 @@ def main() -> None:
         padx=0,
         pady=0,
     )
-    guess_panel = create_guess_panel(window)
+    guess_panel, guess_values = create_guess_panel(window)
     window.update_idletasks()
 
     toolbar_width = 40
@@ -173,6 +180,46 @@ def main() -> None:
     canvas.place(relx=0.5, x=canvas_offset, rely=0.5, anchor="center")
     title.place(in_=canvas, relx=0.5, y=-gap, anchor="s", bordermode="outside")
     guess_panel.place(in_=canvas, rely=0.5, x=-gap, anchor="e", bordermode="outside")
+
+    try:
+        model = load_model()
+    except FileNotFoundError:
+        model = None
+        print("Run python train.py to enable shape guesses.", file=sys.stderr)
+
+    pending_guess: str | None = None
+
+    def update_guess() -> None:
+        nonlocal pending_guess
+        pending_guess = None
+        if model is None:
+            return
+        for shape, percentage in predict_percentages(model, canvas.drawing).items():
+            guess_values[shape].configure(text=f"{percentage}%")
+
+    def schedule_guess(_event: tk.Event) -> None:
+        nonlocal pending_guess
+        if model is not None and pending_guess is None:
+            pending_guess = canvas.after(LIVE_GUESS_INTERVAL_MS, update_guess)
+
+    def cancel_pending_guess(_event: tk.Event | None = None) -> None:
+        nonlocal pending_guess
+        if pending_guess is not None:
+            canvas.after_cancel(pending_guess)
+            pending_guess = None
+
+    def refresh_guess(_event: tk.Event | None = None) -> None:
+        cancel_pending_guess()
+        update_guess()
+
+    def clear_canvas() -> None:
+        canvas.clear()
+        refresh_guess()
+
+    canvas.bind("<Button-1>", schedule_guess, add="+")
+    canvas.bind("<B1-Motion>", schedule_guess, add="+")
+    canvas.bind("<ButtonRelease-1>", refresh_guess, add="+")
+    canvas.bind("<Destroy>", cancel_pending_guess, add="+")
 
     toolbar = tk.Frame(window, background=window["background"])
     toolbar.place(
@@ -215,7 +262,7 @@ def main() -> None:
             **button_style,
         ).pack(fill="x", pady=(0, 8))
     tk.Button(
-        toolbar, image=icons["trash"], text="Clear canvas", command=canvas.clear, **button_style
+        toolbar, image=icons["trash"], text="Clear canvas", command=clear_canvas, **button_style
     ).pack(fill="x")
 
     window.deiconify()
