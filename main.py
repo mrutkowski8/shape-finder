@@ -134,7 +134,7 @@ def main() -> None:
     window.configure(background="#e8e8e8")
 
     project_dir = Path(__file__).resolve().parent
-    icon = tk.PhotoImage(master=window, file=str(project_dir / "icon.png"))
+    icon = tk.PhotoImage(master=window, file=str(project_dir/ "icons" / "icon.png"))
     window.iconphoto(True, icon)
 
     screen_width = window.winfo_screenwidth()
